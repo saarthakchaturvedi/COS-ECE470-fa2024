@@ -1,29 +1,95 @@
+/// A Merkle tree.
 use super::hash::{Hashable, H256};
+use sha2::{Digest, Sha256};
 
 /// A Merkle tree.
 #[derive(Debug, Default)]
 pub struct MerkleTree {
+    root: H256,
+    leaves: Vec<H256>,
+    layers: Vec<Vec<H256>>,
 }
 
 impl MerkleTree {
-    pub fn new<T>(data: &[T]) -> Self where T: Hashable, {
-        unimplemented!()
+    pub fn new<T>(data: &[T]) -> Self 
+    where T: Hashable {
+        let mut leaves: Vec<H256> = Vec::new();
+
+        // Hash each piece of data and add it to the leaves
+        for item in data {
+            leaves.push(item.hash());
+        }
+
+        let mut layers = vec![leaves.clone()];
+        let mut curr = leaves.clone();
+
+        while curr.len() > 1 {
+            if curr.len() % 2 != 0 {
+                curr.push(curr.last().copied().unwrap()); // Duplicate the last element if odd number of nodes
+            }
+            
+            let mut next = Vec::new();
+            for step in curr.chunks(2) {
+                let mut hash = Sha256::new();
+                hash.update(step[0].as_ref());
+                hash.update(step[1].as_ref());
+                let parent_hash = H256(hash.finalize().into());
+                next.push(parent_hash);
+            }
+
+            layers.push(next.clone());
+            curr = next;
+        }
+
+        let root = curr[0];
+
+        MerkleTree { root, leaves, layers }
     }
 
     pub fn root(&self) -> H256 {
-        unimplemented!()
+        self.root
     }
 
-    /// Returns the Merkle Proof of data at index i
     pub fn proof(&self, index: usize) -> Vec<H256> {
-        unimplemented!()
+        let mut proof = Vec::new();
+        let mut idx = index;
+
+        for layer in &self.layers {
+            if idx % 2 == 0 && idx + 1 < layer.len() {
+                proof.push(layer[idx + 1]);
+            } else if idx % 2 == 1 {
+                proof.push(layer[idx - 1]);
+            }
+            idx /= 2;
+        }
+
+        proof
     }
 }
+
 
 /// Verify that the datum hash with a vector of proofs will produce the Merkle root. Also need the
 /// index of datum and `leaf_size`, the total number of leaves.
 pub fn verify(root: &H256, datum: &H256, proof: &[H256], index: usize, leaf_size: usize) -> bool {
-    unimplemented!()
+    let mut hash = *datum;
+    let mut indexval = index;
+
+    for x in proof{
+        let mut hasher = Sha256::new();
+        if indexval%2==0{
+            hasher.update(hash.as_ref());
+            hasher.update(x.as_ref());
+        }
+        else{
+            hasher.update(x.as_ref());
+            hasher.update(hash.as_ref());
+        }
+
+        hash = H256(hasher.finalize().into());
+        indexval = indexval/2;
+    }
+
+    return &hash==root;
 }
 // DO NOT CHANGE THIS COMMENT, IT IS FOR AUTOGRADER. BEFORE TEST
 
@@ -44,6 +110,8 @@ mod tests {
     #[test]
     fn merkle_root() {
         let input_data: Vec<H256> = gen_merkle_tree_data!();
+        let input_data: Vec<H256> = gen_merkle_tree_data!();
+    println!("Input Data: {:?}", input_data);
         let merkle_tree = MerkleTree::new(&input_data);
         let root = merkle_tree.root();
         assert_eq!(
